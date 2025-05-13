@@ -2,8 +2,36 @@
 """
 MCP Server for PowerPoint manipulation using python-pptx.
 """
+import base64
+# 1) EARLY DYLD + preload so Aspose’s Gdip initializer can succeed
+import os, sys
+import tempfile
+from ctypes import cdll
+
+# point dyld to your Homebrew lib dir AND any vendored libgdiplus
+os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = "/usr/local/lib:/opt/homebrew/lib"
+
+# preload the alias & real dylibs *before* Aspose ever gets imported
+alias = "/usr/local/lib/liblibgdiplus.dylib"
+real = "/opt/homebrew/lib/libgdiplus.dylib"
+for p in (alias, real):
+    if os.path.exists(p):
+        try:
+            cdll.LoadLibrary(p)
+        except Exception as e:
+            sys.stderr.write(f"Warning: failed to preload {p}: {e}\\n")
+    else:
+        sys.stderr.write(f"Warning: missing {p}\\n")
+
+# server.py (top of file, before any aspose imports)
+import os
+import platform
+import subprocess
+from ctypes import cdll
 from typing import Dict, List, Optional
 
+import aspose.pydrawing as drawing
+import aspose.slides as slides
 from mcp.server.fastmcp import FastMCP
 
 from presentation import Presentation
@@ -64,10 +92,10 @@ def add_bullet_points(
 @app.tool()
 def add_textbox(
         slide_index: int,
-        left: float,
-        top: float,
-        width: float,
-        height: float,
+        left_inches: float,
+        top_inches: float,
+        width_inches: float,
+        height_inches: float,
         text: str,
         font_size: Optional[int] = None,
         font_name: Optional[str] = None,
@@ -78,7 +106,11 @@ def add_textbox(
 ) -> Dict:
     return get_session().add_textbox(
         slide_index,
-        left, top, width, height, text,
+        left=left_inches,
+        top=top_inches,
+        width=width_inches,
+        height=height_inches,
+        text=text,
         font_size=font_size,
         font_name=font_name,
         bold=bold,
@@ -195,23 +227,26 @@ def add_chart(
                                    )
 
 
-# @app.tool()
-# def get_slide_svg() -> Dict:
-#     svg = get_session().get_slide_svg()
-#     return {"svg": svg}
-#
-#
-# @app.tool()
-# def get_slide_png() -> Dict:
-#     png = get_session().get_slide_png()
-#     return {"png_base64": base64.b64encode(png).decode()}
+@app.tool()
+def get_slide_image_file() -> Dict[str, str]:
+    """
+    Option 3: Save PNG to a temporary file and return its path.
+    Claude will see a file_path but won't render inline; user can open it manually.
+    """
+    png_bytes = get_session().get_slide_image()
+    tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+    tmp.write(png_bytes)
+    tmp.flush()
+    tmp.close()
+    return {"file_path": tmp.name}
 
 
 # ---- Main Execution ----
 def main():
-    # Start the MCP server (stdio for Claude Desktop, or change transport)
-    app.run(transport="stdio")
+    # Run the FastMCP server
+    app.run(transport='stdio')
 
 
 if __name__ == "__main__":
+    # entrypoint()
     main()

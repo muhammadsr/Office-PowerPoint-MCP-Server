@@ -1,10 +1,20 @@
+import io
 import os
+import subprocess
+import tempfile
 import uuid
+from ctypes import cdll
 from typing import Dict, List, Optional, Any
 
-from mcp.server.fastmcp import FastMCP
-
 import ppt_utils
+
+# — now it’s safe to import Aspose —
+import aspose.slides as slides
+import aspose.pydrawing as drawing
+
+# …the rest of your imports and code…
+
+
 
 def validate_parameters(params):
     """
@@ -254,7 +264,7 @@ class Presentation:
             if err2:
                 return {
                     "warning": f"Slide created but failed to set title: {err2}",
-                    "slide_index": len(self._presentation.slides)-1,
+                    "slide_index": len(self._presentation.slides) - 1,
                     "layout_name": slide[1].name
                 }
 
@@ -268,11 +278,10 @@ class Presentation:
 
         return {
             "message": f"Added slide with layout '{slide[1].name}'",
-            "slide_index": len(self._presentation.slides)-1,
+            "slide_index": len(self._presentation.slides) - 1,
             "layout_name": slide[1].name,
             "placeholders": placeholders
         }
-
 
     def get_slide_info(self, slide_index: int) -> Dict:
         # 1) validate slide index
@@ -570,6 +579,25 @@ class Presentation:
             return {
                 "error": f"Failed to add image: {str(e)}"
             }
+
+    def get_slide_image(self) -> bytes:
+        """
+        Render the single slide as a PNG and return its bytes.
+        """
+        # 1. save current PPTX to a temp file
+        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp:
+            # use your existing saver (ppt_utils.save_presentation) or pptx API directly:
+            ppt_utils.save_presentation(self._presentation, tmp.name)
+            tmp_path = tmp.name
+
+        # 2. load with Aspose.Slides
+        with slides.Presentation(tmp_path) as as_pres:
+            slide = as_pres.slides[0]
+            # scaleX=1, scaleY=1 for 100% native size
+            with slide.get_thumbnail(1, 1) as bmp:
+                buf = io.BytesIO()
+                bmp.save(buf, drawing.imaging.ImageFormat.png)
+                return buf.getvalue()
 
     # ---- Table Tools ----
     def add_table(
