@@ -1,0 +1,1 @@
+* Not sure what "gets activated" means. I am assuming that if we trigger the MCP to create a presentation

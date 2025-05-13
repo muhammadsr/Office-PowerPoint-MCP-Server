@@ -10,3 +10,5 @@ wheels/
 .venv
 *.bak
 test/
+/.DS_Store
+.idea/**

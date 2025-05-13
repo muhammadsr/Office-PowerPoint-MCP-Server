@@ -135,7 +135,6 @@ def add_shape_direct(slide, shape_type: str, left: float, top: float, width: flo
         raise ValueError(f"Failed to create '{shape_type}' shape using direct value {shape_value}: {str(e)}")
 
 # ---- Presentation Tools ----
-
 @app.tool()
 def create_presentation(id: Optional[str] = None) -> Dict:
     """Create a new PowerPoint presentation."""
@@ -151,45 +150,16 @@ def create_presentation(id: Optional[str] = None) -> Dict:
     # Store the presentation
     presentations[id] = pres
     current_presentation_id = id
-    
+
+    # add a slide
+    add_slide()
+
     return {
         "presentation_id": id,
         "message": f"Created new presentation with ID: {id}",
         "slide_count": len(pres.slides)
     }
 
-@app.tool()
-def open_presentation(file_path: str, id: Optional[str] = None) -> Dict:
-    """Open an existing PowerPoint presentation from a file."""
-    global current_presentation_id
-    
-    # Check if file exists
-    if not os.path.exists(file_path):
-        return {
-            "error": f"File not found: {file_path}"
-        }
-    
-    # Open the presentation
-    try:
-        pres = ppt_utils.open_presentation(file_path)
-    except Exception as e:
-        return {
-            "error": f"Failed to open presentation: {str(e)}"
-        }
-    
-    # Generate an ID if not provided
-    if id is None:
-        id = f"presentation_{len(presentations) + 1}"
-    
-    # Store the presentation
-    presentations[id] = pres
-    current_presentation_id = id
-    
-    return {
-        "presentation_id": id,
-        "message": f"Opened presentation from {file_path} with ID: {id}",
-        "slide_count": len(pres.slides)
-    }
 
 @app.tool()
 def save_presentation(file_path: str, presentation_id: Optional[str] = None) -> Dict:
@@ -240,80 +210,40 @@ def get_presentation_info(presentation_id: Optional[str] = None) -> Dict:
         "core_properties": core_props
     }
 
-@app.tool()
-def set_core_properties(
-    title: Optional[str] = None,
-    subject: Optional[str] = None,
-    author: Optional[str] = None,
-    keywords: Optional[str] = None,
-    comments: Optional[str] = None,
-    presentation_id: Optional[str] = None
-) -> Dict:
-    """Set core document properties."""
-    # Use the specified presentation or the current one
-    pres_id = presentation_id if presentation_id is not None else current_presentation_id
-    
-    if pres_id is None or pres_id not in presentations:
-        return {
-            "error": "No presentation is currently loaded or the specified ID is invalid"
-        }
-    
-    pres = presentations[pres_id]
-    
-    # Set core properties
-    try:
-        ppt_utils.set_core_properties(
-            pres, title=title, subject=subject, author=author, 
-            keywords=keywords, comments=comments
-        )
-        
-        # Get updated properties
-        updated_props = ppt_utils.get_core_properties(pres)
-        
-        return {
-            "message": "Core properties updated successfully",
-            "core_properties": updated_props
-        }
-    except Exception as e:
-        return {
-            "error": f"Failed to set core properties: {str(e)}"
-        }
-
 # ---- Slide Tools ----
-
 @app.tool()
 def add_slide(
-    layout_index: int = 1,
-    title: Optional[str] = None,
-    presentation_id: Optional[str] = None
+        layout_index: int = 1,
+        title: Optional[str] = None,
+        presentation_id: Optional[str] = None
 ) -> Dict:
     """Add a new slide to the presentation."""
     # Use the specified presentation or the current one
     pres_id = presentation_id if presentation_id is not None else current_presentation_id
-    
+
     if pres_id is None or pres_id not in presentations:
         return {
             "error": "No presentation is currently loaded or the specified ID is invalid"
         }
-    
+
     pres = presentations[pres_id]
-    
+
     # Validate layout index
     if layout_index < 0 or layout_index >= len(pres.slide_layouts):
         return {
             "error": f"Invalid layout index: {layout_index}. Available layouts: 0-{len(pres.slide_layouts) - 1}",
             "available_layouts": ppt_utils.get_slide_layouts(pres)
         }
-    
+
     # Add the slide
     slide, error = ppt_utils.safe_operation(
         "add_slide",
         lambda: ppt_utils.add_slide(pres, layout_index)
     )
-    
+
     if error:
         return {"error": error}
-    
+
     # Set the title if provided
     if title and slide[0].shapes.title:
         _, error = ppt_utils.safe_operation(
@@ -326,16 +256,16 @@ def add_slide(
                 "slide_index": len(pres.slides) - 1,
                 "layout_name": slide[1].name
             }
-    
+
     # Get placeholders
     placeholders, error = ppt_utils.safe_operation(
         "get_placeholders",
         lambda: ppt_utils.get_placeholders(slide[0])
     )
-    
+
     if error:
         placeholders = []
-    
+
     return {
         "message": f"Added slide with layout '{slide[1].name}'",
         "slide_index": len(pres.slides) - 1,
@@ -1162,8 +1092,8 @@ def add_chart(
 
 # ---- Main Execution ----
 def main():
-    # Run the FastMCP server
-    app.run(transport='stdio')
+    # 2️⃣  Start the MCP server (stdio for Claude Desktop, or change transport)
+    app.run(transport="stdio")
 
 if __name__ == "__main__":
     main()
