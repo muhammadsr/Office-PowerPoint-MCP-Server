@@ -2,3 +2,5 @@ mcp[cli]
 python-pptx
 aspose.slides
 cairosvg
+pytest
+lxml

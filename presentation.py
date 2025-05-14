@@ -1,22 +1,16 @@
-import io
+import os
 import os
 import subprocess
 import tempfile
 import uuid
-from ctypes import cdll
 from typing import Dict, List, Optional, Any
 
-import ppt_utils
-import subprocess
-import xml.etree.ElementTree as ET
 # — now it’s safe to import Aspose —
 import aspose.slides as slides
-import aspose.pydrawing as drawing
-from lxml import etree
 from aspose.slides.export import SVGOptions, SvgExternalFontsHandling
+from lxml import etree
 
-# …the rest of your imports and code…
-
+import ppt_utils
 
 
 def validate_parameters(params):
@@ -131,6 +125,60 @@ def add_shape_direct(slide, shape_type: str, left: float, top: float, width: flo
         raise ValueError(f"Failed to create '{shape_type}' shape using direct value {shape_value}: {str(e)}")
 
 
+def remove_aspose_watermark(svg_xml: str) -> str:
+    """Strip any <text>…Aspose…</text> via XML parsing (lxml)."""
+    parser = etree.XMLParser(ns_clean=True, recover=True)
+    tree = etree.fromstring(svg_xml.encode("utf-8"), parser=parser)
+    ns = tree.nsmap.copy()
+    if None in ns:
+        ns["svg"] = ns.pop(None)
+    for txt in tree.xpath(
+            '//svg:text[contains(normalize-space(string(.)), "Aspose")]',
+            namespaces=ns
+    ):
+        parent = txt.getparent()
+        if parent is not None:
+            parent.remove(txt)
+
+    # re-add prolog + DOCTYPE so Inkscape parses it correctly
+    decl = '<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n'
+    doctype = (
+        '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" '
+        '"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n'
+    )
+    body = etree.tostring(tree, encoding="utf-8").decode("utf-8")
+    return decl + doctype + body
+
+def svg_to_png(svg_xml: str, dpi: int = 300) -> bytes:
+    """
+    Save the cleaned SVG to a temp file, call Inkscape CLI to render
+    it at `dpi`, read back the PNG bytes, and clean up.
+    """
+    # 1) write SVG out
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as svg_tmp:
+        svg_tmp.write(svg_xml.encode("utf-8"))
+        svg_path = svg_tmp.name
+
+    # 2) designate a PNG temp
+    png_fd, png_path = tempfile.mkstemp(suffix=".png")
+    os.close(png_fd)
+
+    # 3) render with Inkscape
+    subprocess.run([
+        "inkscape",
+        svg_path,
+        "--export-type=png",
+        "--export-filename", png_path,
+        "--export-dpi", str(dpi)
+    ], check=True)
+
+    # 4) read & cleanup
+    png_bytes = open(png_path, "rb").read()
+    os.remove(svg_path)
+    os.remove(png_path)
+    return png_bytes
+
+
 # ---- Presentation Tools ----
 class Presentation:
     def __init__(self):
@@ -141,14 +189,20 @@ class Presentation:
         # Create the session presentation
         self.create_presentation()
 
-    # @app.tool()
     def create_presentation(self) -> Dict:
         """Create a new PowerPoint presentation."""
         # 1) create a new Presentation()
         self._presentation = ppt_utils.create_presentation()
 
-        # 2) add exactly one slide (blank layout)
-        self.slide, _ = ppt_utils.add_slide(self._presentation, layout_index=1)
+        # 2) find the Blank layout template index
+        blank_idx = 0
+        for i, layout in enumerate(self._presentation.slide_layouts):
+            if layout.name.strip().lower() == "blank":
+                blank_idx = i
+                break
+
+        # 3) add exactly one slide with that Blank layout
+        self.slide, _ = ppt_utils.add_slide(self._presentation, layout_index=blank_idx)
 
         return {
             "presentation_id": self.id,
@@ -191,7 +245,6 @@ class Presentation:
 
         return None
 
-    # @app.tool()
     def save_presentation(self, file_path: Optional[str] = None) -> Dict[str, Any]:
         """
         Save the PPTX to disk.
@@ -240,7 +293,6 @@ class Presentation:
         }
 
     # ---- Slide Tools ----
-    # @app.tool()
     def add_slide(
             self,
             layout_index: int = 1,
@@ -313,7 +365,6 @@ class Presentation:
             "shapes": shapes_info
         }
 
-    # @app.tool()
     def populate_placeholder(
             self,
             slide_index: int,
@@ -583,117 +634,61 @@ class Presentation:
                 "error": f"Failed to add image: {str(e)}"
             }
 
-    def _export_slide_svg(self, pptx_path: str) -> str:
-        """Use Aspose.Slides to write slide 0 out as SVG XML."""
-        # ensure Aspose can embed system fonts
+    def _export_slide_svg(self) -> str:
+        """
+        Export slide 0 as an SVG on disk (so Aspose writes it directly),
+        then read it back as a string.
+        """
+        svg_path = None
+        pptx_file = None
+        # make sure Aspose knows about your system fonts
         slides.FontsLoader.load_external_fonts([
             "/Library/Fonts",
             "/System/Library/Fonts",
             os.path.expanduser("~/Library/Fonts")
         ])
 
+        # choose your SVG options
         opts = SVGOptions.wysiwyg
-        opts.vectorize_text = False               # keep <text> so we can strip watermark
+        opts.vectorize_text = False
         opts.use_frame_size = True
         opts.metafile_rasterization_dpi = 300
         opts.external_fonts_handling = SvgExternalFontsHandling.EMBED
 
-        buf = io.BytesIO()
-        with slides.Presentation(pptx_path) as as_pres:
-            as_pres.slides[0].write_as_svg(buf, opts)
-        return buf.getvalue().decode("utf-8")
+        # 1) save the in‐memory PPTX to disk
+        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp_ppt:
+            ppt_utils.save_presentation(self._presentation, tmp_ppt.name)
+            pptx_file = tmp_ppt.name
 
-    def _remove_aspose_watermark(self, svg_xml: str) -> str:
-        """Strip any <text>…Aspose…</text> via XML parsing (lxml)."""
-        parser = etree.XMLParser(ns_clean=True, recover=True)
-        tree = etree.fromstring(svg_xml.encode("utf-8"), parser=parser)
-        ns = tree.nsmap.copy()
-        if None in ns:
-            ns["svg"] = ns.pop(None)
-        for txt in tree.xpath(
-                '//svg:text[contains(normalize-space(string(.)), "Aspose")]',
-                namespaces=ns
-        ):
-            parent = txt.getparent()
-            if parent is not None:
-                parent.remove(txt)
+        try:
+            # 2) export slide 0 to a temp .svg file
+            svg_fd, svg_path = tempfile.mkstemp(suffix=".svg")
+            os.close(svg_fd)
+            with open(svg_path, "wb") as f:
+                with slides.Presentation(pptx_file) as as_pres:
+                    # write_as_svg takes a file‐like or path
+                    as_pres.slides[0].write_as_svg(f, opts)
 
-        # re-add prolog + DOCTYPE so Inkscape parses it correctly
-        decl = '<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n'
-        doctype = (
-            '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" '
-            '"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n'
-        )
-        body = etree.tostring(tree, encoding="utf-8").decode("utf-8")
-        return decl + doctype + body
+            # 3) read it back
+            with open(svg_path, "r", encoding="utf-8") as f:
+                raw_svg = f.read()
+        finally:
+            if pptx_file: os.remove(pptx_file)
+            if svg_path: os.remove(svg_path)
 
-    def _svg_to_png(self, svg_xml: str, dpi: int = 300) -> bytes:
-        """
-        Save the cleaned SVG to a temp file, call Inkscape CLI to render
-        it at `dpi`, read back the PNG bytes, and clean up.
-        """
-        # 1) write SVG out
-        with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as svg_tmp:
-            svg_tmp.write(svg_xml.encode("utf-8"))
-            svg_path = svg_tmp.name
+        return raw_svg
 
-        # 2) designate a PNG temp
-        png_fd, png_path = tempfile.mkstemp(suffix=".png")
-        os.close(png_fd)
-
-        # 3) render with Inkscape
-        subprocess.run([
-            "inkscape",
-            svg_path,
-            "--export-type=png",
-            "--export-filename", png_path,
-            "--export-dpi", str(dpi)
-        ], check=True)
-
-        # 4) read & cleanup
-        png_bytes = open(png_path, "rb").read()
-        os.remove(svg_path)
-        os.remove(png_path)
-        return png_bytes
-
-    def get_slide_image(self) -> bytes:
+    def get_slide_image(self) -> bytes | dict:
         """
         1) Save current python-pptx presentation to a temp PPTX
         2) Export → SVG, strip watermark, convert → PNG
         3) Return raw PNG bytes
         """
-        # save to temp PPTX
-        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp:
-            ppt_utils.save_presentation(self._presentation, tmp.name)
-            pptx_path = tmp.name
-
-        try:
-            svg = self._export_slide_svg(pptx_path)
-            clean_svg = self._remove_aspose_watermark(svg)
-            png = self._svg_to_png(clean_svg)
-        finally:
-            os.remove(pptx_path)
+        svg = self._export_slide_svg()
+        clean_svg = remove_aspose_watermark(svg)
+        png = svg_to_png(clean_svg)
 
         return png
-
-    # def get_slide_image(self) -> bytes:
-    #     """
-    #     Render the single slide as a PNG and return its bytes.
-    #     """
-    #     # 1. save current PPTX to a temp file
-    #     with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp:
-    #         # use your existing saver (ppt_utils.save_presentation) or pptx API directly:
-    #         ppt_utils.save_presentation(self._presentation, tmp.name)
-    #         tmp_path = tmp.name
-    #
-    #     # 2. load with Aspose.Slides
-    #     with slides.Presentation(tmp_path) as as_pres:
-    #         slide = as_pres.slides[0]
-    #         # scaleX=1, scaleY=1 for 100% native size
-    #         with slide.get_thumbnail(1, 1) as bmp:
-    #             buf = io.BytesIO()
-    #             bmp.save(buf, drawing.imaging.ImageFormat.png)
-    #             return buf.getvalue()
 
     # ---- Table Tools ----
     def add_table(
@@ -1161,3 +1156,22 @@ class Presentation:
             return {
                 "error": f"Failed to add chart: {str(e)}"
             }
+
+    def move_element(self, shape_index: int, left: float, top: float) -> Dict:
+        """Tool to reposition an existing shape on slide 0."""
+        # validate slide exists
+        err = self._validate(slide_index=0)
+        if err:
+            return err
+
+        slide = self._presentation.slides[0]
+        try:
+            moved = ppt_utils.move_shape(slide, shape_index, left, top)
+            # return new coords so user can verify
+            return {
+                "message": f"Moved shape {shape_index} → ({left}\", {top}\")",
+                "new_left": moved.left.inches,
+                "new_top":  moved.top.inches
+            }
+        except Exception as e:
+            return {"error": str(e)}

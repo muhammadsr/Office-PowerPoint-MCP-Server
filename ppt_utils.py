@@ -721,3 +721,14 @@ def get_core_properties(presentation: Presentation) -> Dict:
         'modified': core_props.modified,
         'last_modified_by': core_props.last_modified_by
     }
+
+def move_shape(slide, shape_index: int, left: float, top: float):
+    """
+    Move the shape at slide.shapes[shape_index] to a new (left, top) in inches.
+    """
+    if not (0 <= shape_index < len(slide.shapes)):
+        raise IndexError(f"Shape index out of range: {shape_index}")
+    shape = slide.shapes[shape_index]
+    shape.left = Inches(left)
+    shape.top  = Inches(top)
+    return shape
