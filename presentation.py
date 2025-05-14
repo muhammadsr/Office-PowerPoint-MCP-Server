@@ -184,31 +184,40 @@ class Presentation:
     def __init__(self):
         self.id = str(uuid.uuid4())
         self.slide = None
-        self._presentation = None
+        # self._presentation = None
 
         # Create the session presentation
-        self.create_presentation()
-
-    def create_presentation(self) -> Dict:
-        """Create a new PowerPoint presentation."""
-        # 1) create a new Presentation()
+        # self.create_presentation()
+        """Create a new PPTX and add one slide of the chosen layout."""
         self._presentation = ppt_utils.create_presentation()
 
-        # 2) find the Blank layout template index
-        blank_idx = 0
-        for i, layout in enumerate(self._presentation.slide_layouts):
-            if layout.name.strip().lower() == "blank":
-                blank_idx = i
-                break
 
-        # 3) add exactly one slide with that Blank layout
-        self.slide, _ = ppt_utils.add_slide(self._presentation, layout_index=blank_idx)
+    def get_layouts(self):
+        layouts = [
+            {"index": i, "name": layout.name}
+            for i, layout in enumerate(self._presentation.slide_layouts)
+        ]
+        return {"layouts": layouts}
 
+    def add_layout_index(self, layout_index: Optional[int] = None) -> Dict:
+        # if caller passed a layout_index, use it; otherwise find the blank one
+        if layout_index is None:
+            # find the blank layout by name
+            for i, layout in enumerate(self._presentation.slide_layouts):
+                if layout.name.strip().lower() == "blank":
+                    layout_index = i
+                    break
+            else:
+                layout_index = 0  # fallback if no “Blank” found
+
+        self.slide, _ = ppt_utils.add_slide(self._presentation, layout_index=layout_index)
         return {
             "presentation_id": self.id,
-            "message": f"Created new presentation with ID: {self.id}",
+            "message": f"Created new presentation with layout {layout_index}: "
+                       f"{self._presentation.slide_layouts[layout_index].name}",
             "slide_count": len(self._presentation.slides)
         }
+
 
     def _validate(
             self,

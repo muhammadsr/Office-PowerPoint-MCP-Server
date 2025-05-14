@@ -38,6 +38,21 @@ def get_session() -> Presentation:
 
 # ---- Tools ----
 @app.tool()
+def list_layouts() -> Dict:
+    """
+    Return the available slide layouts (index and name)
+    so the LLM can choose one.
+    """
+    return get_session().get_layouts()
+
+@app.tool()
+def create_presentation(layout_index: Optional[int] = None) -> Dict:
+    """
+    Create a new presentation, using the given layout index (or blank if None).
+    """
+    return get_session().add_layout_index(layout_index)
+
+@app.tool()
 def get_slide_info() -> Dict:
     return get_session().get_slide_info(SESSION_SLIDE_INDEX)
 

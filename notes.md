@@ -7,6 +7,8 @@
 * To preserve the variations from SVG to PNG, I am using `inkscape` which is a system tool. For more info https://inkscape-manuals.readthedocs.io/en/latest/index.html. In case, we want to avoid the system tool, we can use `cairosvg` as a fallback. I did have an issue preserving the font style (PPT → SVG) with that library tho.
 * I had to change the top,left in add_text_box to include "inches" because the LLM was thinking it's pixels.
 * I am using `types.ImageContent` to render the image in the request window. However, I am not sure how to render it in the chat.
+* Noticing a bit of a delay when we get_slide_image. I will need to investigate that further.
+* I found that it is much more effective if we let the LLM `list_layouts` and decide the layout template the for the slide (`0 → Title Slide, 1 → Title and Content ...etc`) when we first create the presentation. 
 
 # Test Coverage (Partial)
 
