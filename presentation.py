@@ -148,6 +148,7 @@ def remove_aspose_watermark(svg_xml: str) -> str:
     body = etree.tostring(tree, encoding="utf-8").decode("utf-8")
     return decl + doctype + body
 
+
 def svg_to_png(svg_xml: str, dpi: int = 300) -> bytes:
     """
     Save the cleaned SVG to a temp file, call Inkscape CLI to render
@@ -183,13 +184,9 @@ class Presentation:
     def __init__(self):
         self.id = str(uuid.uuid4())
         self.slide = None
-        # self._presentation = None
 
-        # Create the session presentation
-        # self.create_presentation()
         """Create a new PPTX and add one slide of the chosen layout."""
         self._presentation = ppt_utils.create_presentation()
-
 
     def get_layouts(self):
         layouts = [
@@ -216,7 +213,6 @@ class Presentation:
                        f"{self._presentation.slide_layouts[layout_index].name}",
             "slide_count": len(self._presentation.slides)
         }
-
 
     def _validate(
             self,
@@ -428,7 +424,7 @@ class Presentation:
 
         pres = self._presentation
 
-        # Check if slide index is valid
+        # Check if the slide index is valid
         if slide_index < 0 or slide_index >= len(pres.slides):
             return {
                 "error": f"Invalid slide index: {slide_index}. Available slides: 0-{len(pres.slides) - 1}"
@@ -437,7 +433,7 @@ class Presentation:
         slide = pres.slides[slide_index]
 
         try:
-            # Check if placeholder exists
+            # Check if a placeholder exists
             if placeholder_idx not in [p.placeholder_format.idx for p in slide.placeholders]:
                 return {
                     "error": f"Placeholder with index {placeholder_idx} not found in slide {slide_index}"
@@ -457,7 +453,6 @@ class Presentation:
                 "error": f"Failed to add bullet points: {str(e)}"
             }
 
-
     def move_element(self, shape_index: int, left: float, top: float) -> Dict:
         """Tool to reposition an existing shape on slide 0."""
         # validate slide exists
@@ -468,15 +463,14 @@ class Presentation:
         slide = self._presentation.slides[0]
         try:
             moved = ppt_utils.move_shape(slide, shape_index, left, top)
-            # return new coords so user can verify
+            # return new coords so the user can verify
             return {
                 "message": f"Moved shape {shape_index} → ({left}\", {top}\")",
                 "new_left": moved.left.inches,
-                "new_top":  moved.top.inches
+                "new_top": moved.top.inches
             }
         except Exception as e:
             return {"error": str(e)}
-
 
     def remove_element(self, slide_index: int, shape_index: int) -> Dict:
         """

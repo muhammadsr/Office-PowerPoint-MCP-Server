@@ -22,6 +22,13 @@ app = FastMCP(
 # Singleton session
 _session: Optional[Presentation] = None
 
+def _new_session() -> Presentation:
+    """
+    Destroy the current deck (if any) and create a fresh Presentation().
+    """
+    global _session
+    _session = Presentation()             # one blank slide is created inside
+    return _session
 
 def get_session() -> Presentation:
     global _session
@@ -39,12 +46,25 @@ def list_layouts() -> Dict:
     """
     return get_session().get_layouts()
 
+# ── Replace the old create_presentation tool with this block ────────────────
 @app.tool()
 def create_presentation(layout_index: Optional[int] = None) -> Dict:
     """
-    Create a new presentation, using the given layout index (or blank if None).
+    Always start a NEW presentation and make it the active session.
+    Return the same payload shape the rest of the API expects.
     """
-    return get_session().add_layout_index(layout_index)
+    pres = _new_session()                     # brand-new deck
+
+    if layout_index is not None:
+        # optional extra slide/layout logic (your original helper)
+        return pres.add_layout_index(layout_index)
+
+    return {
+        "message": "New presentation created",
+        "presentation_id": pres.id,
+        "slide_count": 1
+    }
+
 
 @app.tool()
 def get_slide_info() -> Dict:
