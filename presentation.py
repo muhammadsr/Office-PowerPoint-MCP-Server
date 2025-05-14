@@ -7,10 +7,13 @@ from ctypes import cdll
 from typing import Dict, List, Optional, Any
 
 import ppt_utils
-
+import subprocess
+import xml.etree.ElementTree as ET
 # — now it’s safe to import Aspose —
 import aspose.slides as slides
 import aspose.pydrawing as drawing
+from lxml import etree
+from aspose.slides.export import SVGOptions, SvgExternalFontsHandling
 
 # …the rest of your imports and code…
 
@@ -580,24 +583,117 @@ class Presentation:
                 "error": f"Failed to add image: {str(e)}"
             }
 
+    def _export_slide_svg(self, pptx_path: str) -> str:
+        """Use Aspose.Slides to write slide 0 out as SVG XML."""
+        # ensure Aspose can embed system fonts
+        slides.FontsLoader.load_external_fonts([
+            "/Library/Fonts",
+            "/System/Library/Fonts",
+            os.path.expanduser("~/Library/Fonts")
+        ])
+
+        opts = SVGOptions.wysiwyg
+        opts.vectorize_text = False               # keep <text> so we can strip watermark
+        opts.use_frame_size = True
+        opts.metafile_rasterization_dpi = 300
+        opts.external_fonts_handling = SvgExternalFontsHandling.EMBED
+
+        buf = io.BytesIO()
+        with slides.Presentation(pptx_path) as as_pres:
+            as_pres.slides[0].write_as_svg(buf, opts)
+        return buf.getvalue().decode("utf-8")
+
+    def _remove_aspose_watermark(self, svg_xml: str) -> str:
+        """Strip any <text>…Aspose…</text> via XML parsing (lxml)."""
+        parser = etree.XMLParser(ns_clean=True, recover=True)
+        tree = etree.fromstring(svg_xml.encode("utf-8"), parser=parser)
+        ns = tree.nsmap.copy()
+        if None in ns:
+            ns["svg"] = ns.pop(None)
+        for txt in tree.xpath(
+                '//svg:text[contains(normalize-space(string(.)), "Aspose")]',
+                namespaces=ns
+        ):
+            parent = txt.getparent()
+            if parent is not None:
+                parent.remove(txt)
+
+        # re-add prolog + DOCTYPE so Inkscape parses it correctly
+        decl = '<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n'
+        doctype = (
+            '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" '
+            '"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n'
+        )
+        body = etree.tostring(tree, encoding="utf-8").decode("utf-8")
+        return decl + doctype + body
+
+    def _svg_to_png(self, svg_xml: str, dpi: int = 300) -> bytes:
+        """
+        Save the cleaned SVG to a temp file, call Inkscape CLI to render
+        it at `dpi`, read back the PNG bytes, and clean up.
+        """
+        # 1) write SVG out
+        with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as svg_tmp:
+            svg_tmp.write(svg_xml.encode("utf-8"))
+            svg_path = svg_tmp.name
+
+        # 2) designate a PNG temp
+        png_fd, png_path = tempfile.mkstemp(suffix=".png")
+        os.close(png_fd)
+
+        # 3) render with Inkscape
+        subprocess.run([
+            "inkscape",
+            svg_path,
+            "--export-type=png",
+            "--export-filename", png_path,
+            "--export-dpi", str(dpi)
+        ], check=True)
+
+        # 4) read & cleanup
+        png_bytes = open(png_path, "rb").read()
+        os.remove(svg_path)
+        os.remove(png_path)
+        return png_bytes
+
     def get_slide_image(self) -> bytes:
         """
-        Render the single slide as a PNG and return its bytes.
+        1) Save current python-pptx presentation to a temp PPTX
+        2) Export → SVG, strip watermark, convert → PNG
+        3) Return raw PNG bytes
         """
-        # 1. save current PPTX to a temp file
+        # save to temp PPTX
         with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp:
-            # use your existing saver (ppt_utils.save_presentation) or pptx API directly:
             ppt_utils.save_presentation(self._presentation, tmp.name)
-            tmp_path = tmp.name
+            pptx_path = tmp.name
 
-        # 2. load with Aspose.Slides
-        with slides.Presentation(tmp_path) as as_pres:
-            slide = as_pres.slides[0]
-            # scaleX=1, scaleY=1 for 100% native size
-            with slide.get_thumbnail(1, 1) as bmp:
-                buf = io.BytesIO()
-                bmp.save(buf, drawing.imaging.ImageFormat.png)
-                return buf.getvalue()
+        try:
+            svg = self._export_slide_svg(pptx_path)
+            clean_svg = self._remove_aspose_watermark(svg)
+            png = self._svg_to_png(clean_svg)
+        finally:
+            os.remove(pptx_path)
+
+        return png
+
+    # def get_slide_image(self) -> bytes:
+    #     """
+    #     Render the single slide as a PNG and return its bytes.
+    #     """
+    #     # 1. save current PPTX to a temp file
+    #     with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp:
+    #         # use your existing saver (ppt_utils.save_presentation) or pptx API directly:
+    #         ppt_utils.save_presentation(self._presentation, tmp.name)
+    #         tmp_path = tmp.name
+    #
+    #     # 2. load with Aspose.Slides
+    #     with slides.Presentation(tmp_path) as as_pres:
+    #         slide = as_pres.slides[0]
+    #         # scaleX=1, scaleY=1 for 100% native size
+    #         with slide.get_thumbnail(1, 1) as bmp:
+    #             buf = io.BytesIO()
+    #             bmp.save(buf, drawing.imaging.ImageFormat.png)
+    #             return buf.getvalue()
 
     # ---- Table Tools ----
     def add_table(

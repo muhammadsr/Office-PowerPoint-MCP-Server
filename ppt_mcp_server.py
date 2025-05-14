@@ -6,7 +6,11 @@ import base64
 # 1) EARLY DYLD + preload so Aspose’s Gdip initializer can succeed
 import os, sys
 import tempfile
+import uuid
 from ctypes import cdll
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+from threading import Thread
+import mcp.types as types
 
 # point dyld to your Homebrew lib dir AND any vendored libgdiplus
 os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = "/usr/local/lib:/opt/homebrew/lib"
@@ -28,7 +32,7 @@ import os
 import platform
 import subprocess
 from ctypes import cdll
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import aspose.pydrawing as drawing
 import aspose.slides as slides
@@ -228,17 +232,24 @@ def add_chart(
 
 
 @app.tool()
-def get_slide_image_file() -> Dict[str, str]:
+def get_slide_image() -> List[types.ImageContent]:
     """
-    Option 3: Save PNG to a temporary file and return its path.
-    Claude will see a file_path but won't render inline; user can open it manually.
+    Return the current slide as an MCP image content for inline rendering.
     """
+    # 1) Render slide to PNG bytes
     png_bytes = get_session().get_slide_image()
-    tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-    tmp.write(png_bytes)
-    tmp.flush()
-    tmp.close()
-    return {"file_path": tmp.name}
+
+    # 2) Encode to base64
+    b64 = base64.b64encode(png_bytes).decode('ascii')
+
+    # 3) Return as MCP ImageContent list
+    return [
+        types.ImageContent(
+            type="image",
+            data=b64,
+            mimeType="image/png"
+        )
+    ]
 
 
 # ---- Main Execution ----
