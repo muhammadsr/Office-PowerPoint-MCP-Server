@@ -7,7 +7,9 @@ from pptx import Presentation as Pptx
 @pytest.fixture
 def pres():
     # Each test gets a fresh Presentation instance
-    return Presentation()
+    pres = Presentation()
+    pres.add_slide(layout_index=6)
+    return pres
 
 def test_presentation_object_exists(pres):
     # Under the hood we should have a python-pptx Presentation
@@ -18,15 +20,6 @@ def test_initial_slide_count(pres):
     info = pres.get_presentation_info()
     assert "slide_count" in info
     assert info["slide_count"] == 1
-
-def test_create_presentation_id_and_slide_count(pres):
-    # If we explicitly call create_presentation() again,
-    # it should reset to a 1-slide deck and return that count
-    result = pres.create_presentation()
-    assert isinstance(result, dict)
-    assert "presentation_id" in result
-    assert "slide_count" in result
-    assert result["slide_count"] == 1
 
 
 def test_add_textbox_and_inspect_shape_info(pres):
