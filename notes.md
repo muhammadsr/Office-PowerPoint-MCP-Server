@@ -15,6 +15,7 @@
 * There is a delay when we `get_slide_image`. I will need to investigate that further.
 * In some cases, the PNG we display in the chat is not a 100% perfect match of the PPT.
 * If we are working on an unsaved presentation in one chat, and we start another chat, the previous presentation will get destroyed.
+* Watermark remove logic is a hack and relies on the watermark including the text "Aspose". If that changes, the watermark remove will fail.
 
 # Test Coverage (Partial `/tests`)
 - **Init & Shape Tools**: `Presentation()` creates exactly one blank slide; `add_shape` + `move_element` place shapes as expected. Also, test `get_slide_info` (placeholders/textboxes)
