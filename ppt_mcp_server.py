@@ -243,6 +243,13 @@ def move_element(
     return get_session().move_element(element_or_shape_index, left, top)
 
 
+@app.tool()
+def remove_element(shape_index: int) -> Dict:
+    """Remove the shape at the given index from the current slide."""
+    return get_session().remove_element(SESSION_SLIDE_INDEX, shape_index)
+
+
+
 # ---- Main Execution ----
 def main():
     # Run the FastMCP server

@@ -732,3 +732,16 @@ def move_shape(slide, shape_index: int, left: float, top: float):
     shape.left = Inches(left)
     shape.top  = Inches(top)
     return shape
+
+def remove_shape(slide, shape_index: int) -> None:
+    """
+    Remove the shape at `shape_index` from the slide.
+    """
+    if not (0 <= shape_index < len(slide.shapes)):
+        raise IndexError(f"Shape index {shape_index} out of range (0–{len(slide.shapes)-1})")
+    shape = slide.shapes[shape_index]
+    # remove its underlying XML element
+    sp = shape._element
+    parent = sp.getparent()
+    parent.remove(sp)
+

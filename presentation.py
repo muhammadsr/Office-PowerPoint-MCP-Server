@@ -458,6 +458,44 @@ class Presentation:
                 "error": f"Failed to add bullet points: {str(e)}"
             }
 
+
+    def move_element(self, shape_index: int, left: float, top: float) -> Dict:
+        """Tool to reposition an existing shape on slide 0."""
+        # validate slide exists
+        err = self._validate(slide_index=0)
+        if err:
+            return err
+
+        slide = self._presentation.slides[0]
+        try:
+            moved = ppt_utils.move_shape(slide, shape_index, left, top)
+            # return new coords so user can verify
+            return {
+                "message": f"Moved shape {shape_index} → ({left}\", {top}\")",
+                "new_left": moved.left.inches,
+                "new_top":  moved.top.inches
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+
+    def remove_element(self, slide_index: int, shape_index: int) -> Dict:
+        """
+        Remove the shape at `shape_index` from slide#slide_index.
+        """
+        # 1) validate
+        if err := self._validate(slide_index=slide_index):
+            return err
+
+        slide = self._presentation.slides[slide_index]
+        try:
+            ppt_utils.remove_shape(slide, shape_index)
+            return {
+                "message": f"Removed element {shape_index} from slide {slide_index}"
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
     # ---- Text Tools ----
     def add_textbox(
             self,
@@ -1165,22 +1203,3 @@ class Presentation:
             return {
                 "error": f"Failed to add chart: {str(e)}"
             }
-
-    def move_element(self, shape_index: int, left: float, top: float) -> Dict:
-        """Tool to reposition an existing shape on slide 0."""
-        # validate slide exists
-        err = self._validate(slide_index=0)
-        if err:
-            return err
-
-        slide = self._presentation.slides[0]
-        try:
-            moved = ppt_utils.move_shape(slide, shape_index, left, top)
-            # return new coords so user can verify
-            return {
-                "message": f"Moved shape {shape_index} → ({left}\", {top}\")",
-                "new_left": moved.left.inches,
-                "new_top":  moved.top.inches
-            }
-        except Exception as e:
-            return {"error": str(e)}
