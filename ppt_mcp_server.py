@@ -30,12 +30,6 @@ def get_session() -> Presentation:
     return _session
 
 
-# ---- Needed for multi presentations session ----
-# @app.tool()
-# def get_presentation_info() -> Dict:
-#     return get_session().get_presentation_info()
-
-
 # ---- Tools ----
 @app.tool()
 def list_layouts() -> Dict:

@@ -1,5 +1,4 @@
 import os
-import os
 import subprocess
 import tempfile
 import uuid
@@ -688,14 +687,14 @@ class Presentation:
         """
         svg_path = None
         pptx_file = None
-        # make sure Aspose knows about your system fonts
+
+        # make sure Aspose knows about the system fonts
         slides.FontsLoader.load_external_fonts([
             "/Library/Fonts",
             "/System/Library/Fonts",
             os.path.expanduser("~/Library/Fonts")
         ])
 
-        # choose your SVG options
         opts = SVGOptions.wysiwyg
         opts.vectorize_text = False
         opts.use_frame_size = True

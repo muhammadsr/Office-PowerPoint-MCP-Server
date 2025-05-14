@@ -1,4 +1,3 @@
-# tests/test_presentation.py
 import os
 
 import pytest
